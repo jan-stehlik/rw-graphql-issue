@@ -5,9 +5,10 @@ import sdls from 'src/graphql/**/*.sdl.{js,ts}'
 import services from 'src/services/**/*.{js,ts}'
 
 import { db } from 'src/lib/db'
+import { executionContext, Store } from 'src/lib/executionContext'
 import { logger } from 'src/lib/logger'
 
-export const handler = createGraphQLHandler({
+const graphqlHandler = createGraphQLHandler({
   loggerConfig: { logger, options: {} },
   directives,
   sdls,
@@ -17,3 +18,19 @@ export const handler = createGraphQLHandler({
     db.$disconnect()
   },
 })
+
+export async function handler(event, context) {
+  // this never gets fired
+  console.log(`in handler wrapper`)
+
+  const requestIdHeader = 'x-request-id'
+  const requestId = event.headers[requestIdHeader]
+  const store: Store = new Map([['requestId', requestId]])
+  const response = await executionContext.run(store, () => {
+    return graphqlHandler(event, context)
+  })
+  return {
+    ...response,
+    headers: { ...(response.headers ?? {}), [requestIdHeader]: requestId },
+  }
+}
